@@ -1,56 +1,113 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const { db, initDatabase } = require('./database');
-
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
 const app = express();
-const PORT = 3000;
+const db = new sqlite3.Database('./database.db');
 
 app.use(bodyParser.json());
 
-// Initialize the database
-initDatabase();
+// Criação das tabelas e inserção de dados de exemplo
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT,
+    idade INTEGER,
+    email TEXT UNIQUE,
+    senha TEXT
+  )`);
 
-// Rotas CRUD
-app.post('/users', (req, res) => {
-  const { name, age } = req.body;
-  db.run(`INSERT INTO users (name, age) VALUES (?, ?)`, [name, age], function(err) {
+  db.run(`CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    quantity INTEGER,
+    expiry_date TEXT,
+    user_id INTEGER,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )`);
+});
+
+// Endpoint de login
+app.post('/login', (req, res) => {
+  const { email, senha } = req.body;
+  db.get(`SELECT id, senha FROM users WHERE email = ?`, [email], async (err, row) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      return res.status(400).json({ error: err.message });
     }
-    res.status(201).json({ id: this.lastID });
+    if (row && await bcrypt.compare(senha, row.senha)) {
+      res.json({ success: true, userId: row.id });
+    } else {
+      res.json({ success: false });
+    }
   });
 });
 
-app.get('/users', (req, res) => {
-  db.all(`SELECT * FROM users`, [], (err, rows) => {
+// Endpoint de registro
+app.post('/register', async (req, res) => {
+  const { nome, idade, email, senha } = req.body;
+  const hashedPassword = await bcrypt.hash(senha, 10);
+  db.run(
+    `INSERT INTO users (nome, idade, email, senha) VALUES (?, ?, ?, ?)`,
+    [nome, idade, email, hashedPassword],
+    function (err) {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      res.json({ success: true, userId: this.lastID });
+    }
+  );
+});
+
+app.get('/users/:userId/products', (req, res) => {
+  const { userId } = req.params;
+  db.all(`SELECT * FROM products WHERE user_id = ?`, [userId], (err, rows) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      return res.status(400).json({ error: err.message });
     }
     res.json(rows);
   });
 });
 
-app.put('/users/:id', (req, res) => {
-  const { id } = req.params;
-  const { name, age } = req.body;
-  db.run(`UPDATE users SET name = ?, age = ? WHERE id = ?`, [name, age, id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+app.post('/products', (req, res) => {
+  const { name, quantity, expiry_date, user_id } = req.body;
+  db.run(
+    `INSERT INTO products (name, quantity, expiry_date, user_id) VALUES (?, ?, ?, ?)`,
+    [name, quantity, expiry_date, user_id],
+    function (err) {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      res.json({ id: this.lastID });
     }
-    res.json({ changes: this.changes });
+  );
+});
+
+app.put('/products/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, quantity, expiry_date } = req.body;
+  db.run(
+    `UPDATE products SET name = ?, quantity = ?, expiry_date = ? WHERE id = ?`,
+    [name, quantity, expiry_date, id],
+    function (err) {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      res.json({ success: true });
+    }
+  );
+});
+
+app.delete('/products/:id', (req, res) => {
+  const { id } = req.params;
+  db.run(`DELETE FROM products WHERE id = ?`, [id], function (err) {
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    res.json({ success: true });
   });
 });
 
-app.delete('/users/:id', (req, res) => {
-  const { id } = req.params;
-  db.run(`DELETE FROM users WHERE id = ?`, [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({ changes: this.changes });
-  });
-});
-
+const PORT = 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
