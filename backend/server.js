@@ -1,9 +1,12 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
 const app = express();
 const db = new sqlite3.Database('./database.db');
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 app.use(bodyParser.json());
 
@@ -13,8 +16,9 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT,
     idade INTEGER,
-    email TEXT UNIQUE,
-    senha TEXT
+    email TEXT,
+    senha TEXT,
+    telefone TEXT
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS products (
@@ -30,22 +34,26 @@ db.serialize(() => {
 // Endpoint de login
 app.post('/login', (req, res) => {
   const { email, senha } = req.body;
-  db.get(`SELECT id, senha FROM users WHERE email = ?`, [email], async (err, row) => {
-    if (err) {
-      return res.status(400).json({ error: err.message });
+  db.get(
+    `SELECT id, senha FROM users WHERE email = ?`,
+    [email],
+    (err, row) => {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      if (row && bcrypt.compareSync(senha, row.senha)) {
+        res.json({ success: true, userId: row.id });
+      } else {
+        res.json({ success: false });
+      }
     }
-    if (row && await bcrypt.compare(senha, row.senha)) {
-      res.json({ success: true, userId: row.id });
-    } else {
-      res.json({ success: false });
-    }
-  });
+  );
 });
 
 // Endpoint de registro
-app.post('/register', async (req, res) => {
+app.post('/register', (req, res) => {
   const { nome, idade, email, senha } = req.body;
-  const hashedPassword = await bcrypt.hash(senha, 10);
+  const hashedPassword = bcrypt.hashSync(senha, saltRounds);
   db.run(
     `INSERT INTO users (nome, idade, email, senha) VALUES (?, ?, ?, ?)`,
     [nome, idade, email, hashedPassword],
@@ -60,12 +68,16 @@ app.post('/register', async (req, res) => {
 
 app.get('/users/:userId/products', (req, res) => {
   const { userId } = req.params;
-  db.all(`SELECT * FROM products WHERE user_id = ?`, [userId], (err, rows) => {
-    if (err) {
-      return res.status(400).json({ error: err.message });
+  db.all(
+    `SELECT * FROM products WHERE user_id = ?`,
+    [userId],
+    (err, rows) => {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      res.json(rows);
     }
-    res.json(rows);
-  });
+  );
 });
 
 app.post('/products', (req, res) => {
@@ -82,12 +94,12 @@ app.post('/products', (req, res) => {
   );
 });
 
-app.put('/products/:id', (req, res) => {
-  const { id } = req.params;
-  const { name, quantity, expiry_date } = req.body;
+app.put('/products/:productId', (req, res) => {
+  const { productId } = req.params;
+  const { name, quantity, expiry_date, user_id } = req.body;
   db.run(
-    `UPDATE products SET name = ?, quantity = ?, expiry_date = ? WHERE id = ?`,
-    [name, quantity, expiry_date, id],
+    `UPDATE products SET name = ?, quantity = ?, expiry_date = ?, user_id = ? WHERE id = ?`,
+    [name, quantity, expiry_date, user_id, productId],
     function (err) {
       if (err) {
         return res.status(400).json({ error: err.message });
@@ -97,14 +109,58 @@ app.put('/products/:id', (req, res) => {
   );
 });
 
-app.delete('/products/:id', (req, res) => {
-  const { id } = req.params;
-  db.run(`DELETE FROM products WHERE id = ?`, [id], function (err) {
-    if (err) {
-      return res.status(400).json({ error: err.message });
+app.delete('/products/:productId', (req, res) => {
+  const { productId } = req.params;
+  db.run(
+    `DELETE FROM products WHERE id = ?`,
+    [productId],
+    function (err) {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      res.json({ success: true });
     }
-    res.json({ success: true });
-  });
+  );
+});
+
+// Endpoint para buscar receitas com base nos ingredientes
+app.post('/recipes', async (req, res) => {
+  const { ingredients } = req.body;
+
+  try {
+    const searchUrl = `https://www.tudogostoso.com.br/busca?q=${encodeURIComponent(ingredients.join(' '))}`;
+    const searchResponse = await axios.get(searchUrl);
+    const $ = cheerio.load(searchResponse.data);
+
+    const recipes = [];
+
+    $('.card').each((index, element) => {
+      const title = $(element).find('.card__title').text().trim();
+      const link = $(element).find('.card__title').attr('href');
+      recipes.push({ title, link });
+    });
+
+    const detailedRecipes = [];
+
+    for (let recipe of recipes) {
+      const recipeResponse = await axios.get(`https://www.tudogostoso.com.br${recipe.link}`);
+      const $$ = cheerio.load(recipeResponse.data);
+
+      const ingredientsList = $$('.recipe-ingredients__item').map((i, el) => $$(el).text().trim()).get();
+      const stepsList = $$('.recipe-method__item').map((i, el) => $$(el).text().trim()).get();
+
+      detailedRecipes.push({
+        title: recipe.title,
+        ingredients: ingredientsList,
+        steps: stepsList
+      });
+    }
+
+    res.json(detailedRecipes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao buscar receitas' });
+  }
 });
 
 const PORT = 3000;
