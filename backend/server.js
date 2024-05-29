@@ -52,11 +52,11 @@ app.post('/login', (req, res) => {
 
 // Endpoint de registro
 app.post('/register', (req, res) => {
-  const { nome, idade, email, senha } = req.body;
+  const { nome, idade, email, senha, telefone } = req.body;
   const hashedPassword = bcrypt.hashSync(senha, saltRounds);
   db.run(
-    `INSERT INTO users (nome, idade, email, senha) VALUES (?, ?, ?, ?)`,
-    [nome, idade, email, hashedPassword],
+    `INSERT INTO users (nome, idade, email, senha, telefone) VALUES (?, ?, ?, ?, ?)`,
+    [nome, idade, email, hashedPassword, telefone],
     function (err) {
       if (err) {
         return res.status(400).json({ error: err.message });
