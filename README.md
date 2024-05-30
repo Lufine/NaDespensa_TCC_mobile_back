@@ -15,4 +15,4 @@
 
 <h2>Apiary - NaDespensa</h2>
 
-<li target="_blank">https://app.swaggerhub.com/apis/Leozin/NaDespensa-API/1.0.0</li>
+<li>https://app.swaggerhub.com/apis/Leozin/NaDespensa-API/1.0.0</li>
