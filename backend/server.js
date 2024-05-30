@@ -80,6 +80,34 @@ app.get('/users/:userId/products', (req, res) => {
   );
 });
 
+app.get('/users/:userId', (req, res) => {
+  const { userId } = req.params;
+  db.all(
+    `SELECT * FROM users WHERE id = ?`,
+    [userId],
+    (err, rows) => {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      res.json(rows);
+    }
+  );
+});
+
+app.delete('/users/:userId', (req, res) => {
+  const { userId } = req.params;
+  db.run(
+    `DELETE FROM users WHERE id = ?`,
+    [userId],
+    function (err) {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      res.json({ success: true });
+    }
+  );
+});
+
 app.post('/products', (req, res) => {
   const { name, quantity, expiry_date, user_id } = req.body;
   db.run(
