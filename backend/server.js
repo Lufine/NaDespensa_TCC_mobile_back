@@ -10,7 +10,7 @@ const cheerio = require('cheerio');
 
 app.use(bodyParser.json());
 
-// Criação das tabelas e inserção de dados de exemplo
+// Criação das tabelas
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

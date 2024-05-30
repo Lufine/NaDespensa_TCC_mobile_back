@@ -2,6 +2,13 @@
 
 <h2>Instalação:</h2>
 <li>npm install express sqlite3</li>
+<li>npm install -g npm@latest</li>
+<li>npm install axios</li>
+<li>npm install date-fns</li>
+<li>npm install bcrypt</li>
+<li>npm install cheerio axios</li>
+
 
 <h2>Rodar o código:</h2>
+<li>cd .\backend\</li>
 <li>node server.js</li>
